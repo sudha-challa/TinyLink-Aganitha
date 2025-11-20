@@ -1,0 +1,206 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TinyLink — Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- <link rel="stylesheet" href="styles.css"> -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
+  <header class="bg-gradient-to-br from-slate-100 to-slate-200 shadow-[0_4px_12px_rgba(30,144,255,0.35)]">
+    <div class="max-w-4xl mx-auto p-4 flex items-center justify-between">
+      <h1 class="text-xl font-semibold">TinyLink</h1>
+      <nav>
+        <a href="/" class="mr-4 text-sm">Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-4">
+    <section class="mb-6 bg-white p-4 rounded shadow-[0_4px_12px_rgba(30,144,255,0.35)]">
+      <h2 class="font-medium mb-2">Create a short link</h2>
+      <form id="createForm" class="space-y-3">
+        <div>
+          <label class="block text-sm">Target URL</label>
+          <input id="url" type="url" placeholder="https://example.com/very/long/url" required class="w-full border rounded p-2"/>
+          <p id="urlError" class="text-xs text-red-600 hidden"></p>
+        </div>
+        <div>
+          <label class="block text-sm">Custom code (optional) <span class="text-xs text-slate-500">6-8 alphanumeric</span></label>
+          <input id="code" type="text" placeholder="e.g. docs123" class="w-full border rounded p-2"/>
+          <p id="codeError" class="text-xs text-red-600 hidden"></p>
+        </div>
+        <div>
+          <button id="createBtn" class="px-3 py-2 bg-sky-600 text-white rounded disabled:opacity-60">Create</button>
+          <span id="createOk" class="text-sm text-green-600 hidden">Created!</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="bg-white p-4 rounded shadow-[0_4px_12px_rgba(30,144,255,0.35)]">
+      <h2 class="font-medium mb-2">Your links</h2>
+      <input id="filter" placeholder="Filter by code or URL" class="mb-3 border rounded p-2 w-full"/>
+      <div id="tableWrap" class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-left text-slate-600">
+            <tr>
+              <th>Short</th>
+              <th>Target</th>
+              <th class="pr-4">Clicks</th>
+              <th>Last clicked</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="linksBody">
+            <!-- JS fills -->
+          </tbody>
+        </table>
+      </div>
+      <p id="empty" class="text-slate-500 mt-4 hidden">No links yet.</p>
+    </section>
+  </main>
+
+<script>
+const API_BASE = '/api';
+const BASE_URL = (window.location.origin);
+
+function shortHref(code){ return BASE_URL + '/' + code; }
+
+async function fetchLinks() {
+  const res = await fetch(API_BASE + '/links');
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function truncate(s, n=60){
+  if(!s) return '';
+  if (s.length <= n) return s;
+  return s.slice(0,n-1)+'…';
+}
+
+function formatDate(d){
+  if(!d) return '-';
+  const dt = new Date(d);
+  return dt.toLocaleString();
+}
+
+async function refresh() {
+  const list = await fetchLinks();
+  const tbody = document.getElementById('linksBody');
+  tbody.innerHTML = '';
+  if (list.length === 0) {
+    document.getElementById('empty').classList.remove('hidden');
+  } else {
+    document.getElementById('empty').classList.add('hidden');
+  }
+  list.forEach(link => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-2 pr-2">
+        <a href="${shortHref(link.code)}" target="_blank" class="text-sky-600 font-medium">${link.code}</a>
+        <div class="text-xs text-slate-500">${shortHref(link.code)}</div>
+      </td>
+      <td class="py-2 pr-2"><div title="${link.url}">${truncate(link.url,80)}</div></td>
+      <td class="py-2 pr-2">${link.clicks}</td>
+      <td class="py-2 pr-2">${link.last_clicked ? formatDate(link.last_clicked) : '-'}</td>
+      <td class="py-2 pr-2">
+        <button class="copyBtn mr-2 px-2 py-1 border rounded" data-code="${link.code}">Copy</button>
+        <a class="mr-2 px-2 py-1 border rounded" href="/code/${link.code}">Stats</a>
+        <button class="delBtn px-2 py-1 bg-red-600 text-white rounded" data-code="${link.code}">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  attachActions();
+}
+
+function attachActions(){
+  document.querySelectorAll('.copyBtn').forEach(b=>{
+    b.onclick = () => {
+      navigator.clipboard.writeText(window.location.origin + '/' + b.dataset.code);
+      b.textContent = 'Copied';
+      setTimeout(()=> b.textContent = 'Copy', 1500);
+    };
+  });
+  document.querySelectorAll('.delBtn').forEach(async b=>{
+    b.onclick = async () => {
+      if (!confirm('Delete this link?')) return;
+      const code = b.dataset.code;
+      const res = await fetch(API_BASE + '/links/' + encodeURIComponent(code), { method: 'DELETE' });
+      if (res.status === 204) {
+        await refresh();
+      } else {
+        alert('Delete failed');
+      }
+    };
+  });
+}
+
+/* Form handling */
+document.getElementById('createForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const url = document.getElementById('url').value.trim();
+  const code = document.getElementById('code').value.trim();
+  const urlError = document.getElementById('urlError');
+  const codeError = document.getElementById('codeError');
+  urlError.classList.add('hidden');
+  codeError.classList.add('hidden');
+
+  if (!url) {
+    urlError.textContent = 'URL is required'; urlError.classList.remove('hidden'); return;
+  }
+  try {
+    new URL(url);
+  } catch (err) {
+    urlError.textContent = 'Invalid URL'; urlError.classList.remove('hidden'); return;
+  }
+  if (code && !/^[A-Za-z0-9]{6,8}$/.test(code)) {
+    codeError.textContent = 'Custom code must be 6-8 alphanumeric characters'; codeError.classList.remove('hidden'); return;
+  }
+
+  const btn = document.getElementById('createBtn');
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+
+  const body = { url };
+  if (code) body.code = code;
+
+  const res = await fetch(API_BASE + '/links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (res.status === 201) {
+    document.getElementById('createOk').classList.remove('hidden');
+    document.getElementById('url').value = '';
+    document.getElementById('code').value = '';
+    await refresh();
+    setTimeout(()=> document.getElementById('createOk').classList.add('hidden'), 2000);
+  } else if (res.status === 409) {
+    const data = await res.json();
+    codeError.textContent = data.error || 'Code already exists'; codeError.classList.remove('hidden');
+  } else {
+    const data = await res.json();
+    urlError.textContent = data.error || 'Create failed'; urlError.classList.remove('hidden');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Create';
+});
+
+/* Filter */
+document.getElementById('filter').addEventListener('input', async (e)=>{
+  const q = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#linksBody tr');
+  rows.forEach(tr=>{
+    const text = tr.textContent.toLowerCase();
+    tr.style.display = text.includes(q) ? '' : 'none';
+  });
+});
+
+refresh();
+</script>
+</body>
+</html>

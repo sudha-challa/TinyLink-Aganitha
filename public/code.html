@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TinyLink — Stats</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-2xl mx-auto p-4">
+    <a href="/" class="text-sm text-sky-600">&larr; Back</a>
+    <div id="card" class="mt-4 bg-white p-4 rounded shadow-sm">
+      <h1 id="code" class="text-xl font-semibold">Stats</h1>
+      <div id="loading" class="mt-4 text-slate-500">Loading...</div>
+      <div id="content" class="hidden space-y-2">
+        <div><strong>Short:</strong> <span id="short"></span></div>
+        <div><strong>Target:</strong> <a id="target" href="#" target="_blank"></a></div>
+        <div><strong>Clicks:</strong> <span id="clicks"></span></div>
+        <div><strong>Last clicked:</strong> <span id="last"></span></div>
+        <div><strong>Created:</strong> <span id="created"></span></div>
+      </div>
+      <div id="error" class="text-red-600 hidden mt-2">Not found</div>
+    </div>
+  </div>
+
+  <script>
+    async function load() {
+      const path = window.location.pathname; // /code/:code
+      const parts = path.split('/');
+      const code = parts[2];
+      document.getElementById('code').textContent = 'Stats — ' + code;
+      try {
+        const res = await fetch('/api/links/' + encodeURIComponent(code));
+        if (res.status === 404) {
+          document.getElementById('error').classList.remove('hidden');
+          document.getElementById('loading').classList.add('hidden');
+          return;
+        }
+        const data = await res.json();
+        document.getElementById('short').textContent = data.code;
+        document.getElementById('target').textContent = data.url;
+        document.getElementById('target').href = data.url;
+        document.getElementById('clicks').textContent = data.clicks;
+        document.getElementById('last').textContent = data.last_clicked ? new Date(data.last_clicked).toLocaleString() : '-';
+        document.getElementById('created').textContent = new Date(data.created_at).toLocaleString();
+        document.getElementById('content').classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+      } catch (err) {
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
